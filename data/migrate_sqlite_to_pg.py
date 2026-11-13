@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """Bulk-migrates the Wikidata SQLite database into PostgreSQL using COPY."""
 
+import argparse
 import datetime
 import os
 import sqlite3
 import time
 import unicodedata
 import psycopg
+
+DEFAULT_SQLITE_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "wikidata-scripts",
+    "celebrities-latest-all.db",
+)
 
 
 def normalize_name(text: str | None) -> str:
@@ -39,7 +46,14 @@ def parse_iso_date(raw: str | None) -> datetime.date | None:
 
 
 def main() -> None:
-    sqlite_path = os.environ.get("SQLITE_PATH", "/data/celebrities-latest-all.db")
+    parser = argparse.ArgumentParser(description="Migrate Wikidata SQLite DB to PostgreSQL.")
+    parser.add_argument(
+        "--sqlite-path",
+        default=os.environ.get("SQLITE_PATH", DEFAULT_SQLITE_PATH),
+        help="Path to the source SQLite database (defaults to ./wikidata-scripts/celebrities-latest-all.db).",
+    )
+    args = parser.parse_args()
+    sqlite_path = args.sqlite_path
     pg_dsn = os.environ["PG_PRIMARY_DSN"]
     batch_size = int(os.environ.get("BATCH_SIZE", "50000"))
 

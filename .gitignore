@@ -21,6 +21,10 @@ crash.log
 
 # Data / Secrets
 *.db
+*.db-journal
+*.db-wal
+*.db-shm
 *.sqlite
+*.bz2
 *.env
 .env.local
