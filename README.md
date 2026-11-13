@@ -9,7 +9,30 @@ A production-style proof-of-concept answering *"Is this person dead or not?"* in
 
 ---
 
-## 1. Quickstart (Local Docker Compose)
+## 1. Preparing the Data (Wikidata → SQLite)
+
+Before migrating data into PostgreSQL, generate `data/wikidata-scripts/celebrities-latest-all.db` using the scripts in [data/wikidata-scripts](data/wikidata-scripts/README.md):
+
+1. **Download the Wikidata entity dump** (~95 GB compressed):
+   ```bash
+   cd data/wikidata-scripts
+   aria2c -x 16 -s 16 https://dumps.wikimedia.org/wikidatawiki/entities/latest-all.json.bz2
+   ```
+2. **Extract celebrities (born since 1900) into SQLite:**
+   ```bash
+   # Direct Python streaming:
+   python3 dump_pipeline.py latest-all.json.bz2 --db celebrities-latest-all.db
+
+   # Or faster multi-core decompression with lbzip2:
+   lbzip2 -dc latest-all.json.bz2 | python3 dump_pipeline.py - --db celebrities-latest-all.db
+   ```
+   *(Alternatively, use `sparql_pipeline.py --db celebrities-latest-all.db` for smaller/filtered subsets — see [data/wikidata-scripts/README.md](data/wikidata-scripts/README.md) for all options.)*
+
+By default, [migrate_sqlite_to_pg.py](data/migrate_sqlite_to_pg.py) reads `./wikidata-scripts/celebrities-latest-all.db` relative to `data/`. You can override this via the `SQLITE_PATH` environment variable or `--sqlite-path` CLI flag.
+
+---
+
+## 2. Quickstart (Local Docker Compose)
 
 1. **Start the infrastructure, load balancer, API replicas, and React UI:**
    ```bash
@@ -30,7 +53,7 @@ A production-style proof-of-concept answering *"Is this person dead or not?"* in
 
 ---
 
-## 2. Running Unit Tests (xUnit)
+## 3. Running Unit Tests (xUnit)
 
 With Docker (no local .NET SDK required):
 ```bash
@@ -39,7 +62,7 @@ docker run --rm -v "$(pwd):/src" -w /src mcr.microsoft.com/dotnet/sdk:9.0 dotnet
 
 ---
 
-## 3. Local Kubernetes Testing
+## 4. Local Kubernetes Testing
 
 If you have Docker Desktop Kubernetes, `kind`, or `k3d` running with `ingress-nginx`:
 ```bash
@@ -50,7 +73,7 @@ kubectl apply -k k8s/overlays/local
 
 ---
 
-## 4. Deploying to Azure (AKS + Managed PostgreSQL Read Replica + Redis)
+## 5. Deploying to Azure (AKS + Managed PostgreSQL Read Replica + Redis)
 
 1. **Authenticate with Azure CLI:**
    ```bash
@@ -83,7 +106,7 @@ kubectl apply -k k8s/overlays/local
 
 ---
 
-## 5. GitHub CI/CD & Branch Protection
+## 6. GitHub CI/CD & Branch Protection
 
 1. Create a private GitHub repository and push this code.
 2. In GitHub **Settings → Branches → Add branch protection rule** for `main`:

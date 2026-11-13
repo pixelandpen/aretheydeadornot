@@ -79,14 +79,14 @@ resource "azurerm_postgresql_flexible_server" "read_replica" {
 }
 
 resource "azurerm_redis_cache" "redis" {
-  name                = "redis-${var.project_name}-${random_string.suffix.result}"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-  capacity            = 0
-  family              = "C"
-  sku_name            = "Basic"
+  name                 = "redis-${var.project_name}-${random_string.suffix.result}"
+  location             = azurerm_resource_group.rg.location
+  resource_group_name  = azurerm_resource_group.rg.name
+  capacity             = 0
+  family               = "C"
+  sku_name             = "Basic"
   non_ssl_port_enabled = false
-  minimum_tls_version = "1.2"
+  minimum_tls_version  = "1.2"
 }
 
 resource "helm_release" "ingress_nginx" {

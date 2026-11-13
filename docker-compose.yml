@@ -76,10 +76,10 @@ services:
       postgres-primary:
         condition: service_healthy
     environment:
-      SQLITE_PATH: /sqlite/celebrities-latest-all.db
+      SQLITE_PATH: /etl/wikidata-scripts/celebrities-latest-all.db
       PG_PRIMARY_DSN: postgresql://postgres:postgres_password@postgres-primary:5432/celebrities
     volumes:
-      - /mnt/c/Users/Graham/Documents/job-search-2026/coding/celebrity-db:/sqlite:ro
+      - ./data/wikidata-scripts:/etl/wikidata-scripts:ro
 
   api-1:
     build:

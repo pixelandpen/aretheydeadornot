@@ -1,0 +1,4 @@
+wikidata-scripts/
+*.db
+*.db-journal
+*.bz2

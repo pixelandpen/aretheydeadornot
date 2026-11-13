@@ -2,6 +2,9 @@
 **/obj/
 **/node_modules/
 **/dist/
+**/*.db
+**/*.db-journal
+**/*.bz2
 .git/
 .vs/
 .terraform/
