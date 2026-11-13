@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# Set ACR_LOGIN_SERVER in CD pipeline via `kustomize edit set image`
+images:
+  - name: aretheydeadornot-api
+    newName: REPLACE_WITH_ACR.azurecr.io/aretheydeadornot-api
+    newTag: latest
+  - name: aretheydeadornot-web
+    newName: REPLACE_WITH_ACR.azurecr.io/aretheydeadornot-web
+    newTag: latest

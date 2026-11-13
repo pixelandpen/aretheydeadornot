@@ -1,0 +1,39 @@
+name: CD (Azure AKS)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Build, Push to ACR & Deploy to AKS
+    runs-on: ubuntu-latest
+    if: vars.AZURE_CLIENT_ID != ''
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to ACR & Push Images
+        run: |
+          az acr login --name ${{ vars.ACR_NAME }}
+          docker build -f src/Api/Dockerfile -t ${{ vars.ACR_LOGIN_SERVER }}/aretheydeadornot-api:${{ github.sha }} .
+          docker build -f src/Web/Dockerfile -t ${{ vars.ACR_LOGIN_SERVER }}/aretheydeadornot-web:${{ github.sha }} src/Web
+          docker push ${{ vars.ACR_LOGIN_SERVER }}/aretheydeadornot-api:${{ github.sha }}
+          docker push ${{ vars.ACR_LOGIN_SERVER }}/aretheydeadornot-web:${{ github.sha }}
+
+      - name: Deploy to AKS
+        run: |
+          az aks get-credentials --resource-group ${{ vars.AKS_RESOURCE_GROUP }} --name ${{ vars.AKS_CLUSTER_NAME }} --overwrite-existing
+          cd k8s/overlays/azure
+          kustomize edit set image aretheydeadornot-api=${{ vars.ACR_LOGIN_SERVER }}/aretheydeadornot-api:${{ github.sha }}
+          kustomize edit set image aretheydeadornot-web=${{ vars.ACR_LOGIN_SERVER }}/aretheydeadornot-web:${{ github.sha }}
+          kubectl apply -k .

@@ -1,0 +1,130 @@
+services:
+  postgres-primary:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_DB: celebrities
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=replica"
+      - "-c"
+      - "hot_standby=on"
+      - "-c"
+      - "max_wal_senders=10"
+      - "-c"
+      - "max_replication_slots=10"
+      - "-c"
+      - "hot_standby_feedback=on"
+    volumes:
+      - pg_primary_data:/var/lib/postgresql/data
+      - ./data/00-init-replication.sh:/docker-entrypoint-initdb.d/00-init-replication.sh:ro
+      - ./data/init-primary.sql:/docker-entrypoint-initdb.d/01-init-primary.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d celebrities"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-replica:
+    image: postgres:17-alpine
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: replicator_pw
+    entrypoint:
+      - bash
+      - -c
+      - |
+        if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
+          rm -rf /var/lib/postgresql/data/*
+          pg_basebackup -h postgres-primary -p 5432 -U replicator -D /var/lib/postgresql/data -Fp -Xs -R -P
+          chown -R postgres:postgres /var/lib/postgresql/data
+          chmod 0700 /var/lib/postgresql/data
+        fi
+        exec docker-entrypoint.sh postgres -c hot_standby=on
+    volumes:
+      - pg_replica_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d celebrities"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  etl:
+    profiles: ["etl"]
+    build:
+      context: ./data
+      dockerfile: Dockerfile.etl
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    environment:
+      SQLITE_PATH: /sqlite/celebrities-latest-all.db
+      PG_PRIMARY_DSN: postgresql://postgres:postgres_password@postgres-primary:5432/celebrities
+    volumes:
+      - /mnt/c/Users/Graham/Documents/job-search-2026/coding/celebrity-db:/sqlite:ro
+
+  api-1:
+    build:
+      context: .
+      dockerfile: src/Api/Dockerfile
+    depends_on:
+      postgres-replica:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__PostgresReadReplica: Host=postgres-replica;Port=5432;Database=celebrities;Username=postgres;Password=postgres_password;Maximum Pool Size=50
+      ConnectionStrings__Redis: redis:6379
+
+  api-2:
+    build:
+      context: .
+      dockerfile: src/Api/Dockerfile
+    depends_on:
+      postgres-replica:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__PostgresReadReplica: Host=postgres-replica;Port=5432;Database=celebrities;Username=postgres;Password=postgres_password;Maximum Pool Size=50
+      ConnectionStrings__Redis: redis:6379
+
+  web:
+    build:
+      context: ./src/Web
+      dockerfile: Dockerfile
+
+  lb:
+    image: nginx:1.27-alpine
+    depends_on:
+      - api-1
+      - api-2
+      - web
+    volumes:
+      - ./nginx/lb.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8080:80"
+
+volumes:
+  pg_primary_data:
+  pg_replica_data:
