@@ -14,10 +14,10 @@ output "postgres_primary_fqdn" {
   value = azurerm_postgresql_flexible_server.primary.fqdn
 }
 
-output "postgres_read_replica_fqdn" {
-  value = azurerm_postgresql_flexible_server.read_replica.fqdn
+output "redis_hostname" {
+  value = azurerm_managed_redis.redis.hostname
 }
 
-output "redis_hostname" {
-  value = azurerm_redis_cache.redis.hostname
+output "redis_port" {
+  value = azurerm_managed_redis.redis.default_database[0].port
 }

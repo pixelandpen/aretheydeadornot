@@ -1,6 +1,6 @@
 project_name          = "aretheydeadornot"
 location              = "eastus2"
-aks_node_vm_size      = "Standard_B2s"
+aks_node_vm_size        = "Standard_D2s_v6"
 aks_node_count        = 2
 postgres_admin_username = "pgadmin"
 postgres_admin_password = "CHANGE_ME_STRONG_PASSWORD_123!"

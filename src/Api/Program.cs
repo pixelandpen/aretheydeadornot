@@ -1,9 +1,12 @@
 using System.Diagnostics;
+using System.Threading.RateLimiting;
 using AreTheyDeadOrNot.Core.Models;
 using AreTheyDeadOrNot.Core.Repositories;
 using AreTheyDeadOrNot.Core.Services;
 using AreTheyDeadOrNot.Infrastructure;
 using AreTheyDeadOrNot.Infrastructure.Data;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Caching.Hybrid;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,6 +19,47 @@ builder.Services.AddCors(options =>
         policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
 });
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+var permitLimit = builder.Configuration.GetValue("RateLimiting:PermitLimit", 60);
+var windowSeconds = builder.Configuration.GetValue("RateLimiting:WindowSeconds", 10);
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, token) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter =
+                Math.Ceiling(retryAfter.TotalSeconds).ToString();
+        }
+
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new { error = "Rate limit exceeded. Please slow down." },
+            cancellationToken: token);
+    };
+
+    options.AddPolicy("api-per-ip", httpContext =>
+    {
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetSlidingWindowLimiter(ip, _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = permitLimit,
+            Window = TimeSpan.FromSeconds(windowSeconds),
+            SegmentsPerWindow = 5,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+    });
+});
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -23,7 +67,9 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseForwardedHeaders();
 app.UseCors();
+app.UseRateLimiter();
 
 // Kubernetes liveness & readiness probes
 app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
@@ -47,7 +93,7 @@ app.MapGet("/health/ready", async (ReadReplicaDataSource replica, CancellationTo
     }
 });
 
-var v1 = app.MapGroup("/api/v1");
+var v1 = app.MapGroup("/api/v1").RequireRateLimiting("api-per-ip");
 
 v1.MapGet("/search", async (
     string? name,
