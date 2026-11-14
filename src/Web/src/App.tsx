@@ -21,6 +21,9 @@ function formatDate(iso: string | null): string {
 }
 
 export function App() {
+  const [page, setPage] = useState<'home' | 'about'>(() =>
+    window.location.pathname === '/about' ? 'about' : 'home',
+  );
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +32,22 @@ export function App() {
   const [recentDeaths, setRecentDeaths] = useState<PersonDto[]>([]);
   const [inMemory, setInMemory] = useState<PersonDto[]>([]);
   const [listsLoading, setListsLoading] = useState(true);
+
+  useEffect(() => {
+    const onPopState = () => {
+      setPage(window.location.pathname === '/about' ? 'about' : 'home');
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  function navigate(next: 'home' | 'about') {
+    const path = next === 'about' ? '/about' : '/';
+    if (window.location.pathname !== path) {
+      window.history.pushState({}, '', path);
+    }
+    setPage(next);
+  }
 
   useEffect(() => {
     Promise.all([fetchRecentDeaths(8), fetchInMemory(3, 8)])
@@ -74,10 +93,62 @@ export function App() {
 
   return (
     <div className="container">
-      <header className="hero">
+      <nav className="top-nav" aria-label="Primary">
+        <button
+          type="button"
+          className={`nav-link ${page === 'home' ? 'active' : ''}`}
+          onClick={() => navigate('home')}
+        >
+          Search
+        </button>
+        <button
+          type="button"
+          className={`nav-link ${page === 'about' ? 'active' : ''}`}
+          onClick={() => navigate('about')}
+        >
+          About This Site
+        </button>
+      </nav>
+
+      {page === 'about' ? (
+        <main className="card about-card">
+          <h1>About This Site</h1>
+          <p>
+            Years ago, before Internet search and Google dominance was a thing, I was chatting with
+            my brother about a certain celebrity (who it was is lost to the mists of time). One of
+            us asked, &ldquo;I wonder if they are still alive?&rdquo; and the other jokingly said,
+            &ldquo;We need a website called amideadornot.com we can ask!&rdquo; (At that point in
+            time, amihotornot.com was all the rage.)
+          </p>
+          <p>
+            So, when I wanted to learn some new skills around Microsoft Azure deployments, .NET
+            APIs, Redis caching, and React, I decided to make the site. Within several hours,
+            Google Antigravity had a working prototype running in Docker containers on my laptop,
+            and a little after that, I had it working in the cloud. What a time to be alive (no pun
+            intended haha)!
+          </p>
+          <p>
+            You can see the source code at{' '}
+            <a
+              href="https://github.com/pixelandpen/aretheydeadornot"
+              target="_blank"
+              rel="noreferrer"
+            >
+              https://github.com/pixelandpen/aretheydeadornot
+            </a>
+            . This is totally for fun and has no commercial value, but I&rsquo;m totally open to
+            pull requests for the repo so I can continue learning.
+          </p>
+          <button type="button" className="back-btn" onClick={() => navigate('home')}>
+            &larr; Back to Search
+          </button>
+        </main>
+      ) : (
+        <>
+          <header className="hero">
         <h1>Are They Dead Or Not?</h1>
         <p className="subtitle">
-          Instant Wikidata lookup backed by PostgreSQL read replicas &amp; Redis HybridCache
+          Instant Wikidata lookup backed by PostgreSQL &amp; Redis HybridCache
         </p>
 
         <form className="search-form" onSubmit={handleSubmit}>
@@ -217,6 +288,8 @@ export function App() {
           )}
         </section>
       </div>
+        </>
+      )}
     </div>
   );
 }
