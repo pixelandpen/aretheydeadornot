@@ -5,15 +5,21 @@ variable "project_name" {
 }
 
 variable "location" {
-  description = "Azure region"
+  description = "Azure region for AKS, ACR, and Redis"
   type        = string
   default     = "eastus2"
 }
 
-variable "aks_node_vm_size" {
-  description = "VM size for AKS nodes (Standard_B2s is cost-effective for POC/learning)"
+variable "postgres_location" {
+  description = "Azure region for PostgreSQL Flexible Server (centralus supports Burstable SKUs)"
   type        = string
-  default     = "Standard_B2s"
+  default     = "centralus"
+}
+
+variable "aks_node_vm_size" {
+  description = "VM size for AKS nodes"
+  type        = string
+  default     = "Standard_D2s_v6"
 }
 
 variable "aks_node_count" {

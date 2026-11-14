@@ -2,6 +2,7 @@ using AreTheyDeadOrNot.Core.Models;
 using AreTheyDeadOrNot.Core.Repositories;
 using AreTheyDeadOrNot.Infrastructure.Data;
 using Dapper;
+using Npgsql;
 
 namespace AreTheyDeadOrNot.Infrastructure.Repositories;
 
@@ -62,12 +63,13 @@ public sealed class PostgresPersonRepository(ReadReplicaDataSource readReplica) 
                 new { NormalizedName = normalizedName, Limit = limit },
                 cancellationToken: cancellationToken))).ToList();
 
-        if (exactRows.Count > 0)
+        if (exactRows.Count > 0 || normalizedName.Length < 3)
         {
             return exactRows.Select(MapRow).ToList();
         }
 
-        // Fallback to trigram similarity when exact normalized name has no match
+        // Fallback to trigram similarity when exact normalized name has no match.
+        // Tighter threshold + 1.5s statement timeout prevent cache-miss bursts from saturating DB CPU.
         const string fuzzySql = """
             WITH matched AS (
                 SELECT qid, name, birth_date, death_date, sitelinks,
@@ -96,13 +98,32 @@ public sealed class PostgresPersonRepository(ReadReplicaDataSource readReplica) 
             ORDER BY m.sim DESC, m.sitelinks DESC;
             """;
 
-        var fuzzyRows = await conn.QueryAsync<PersonRow>(
-            new CommandDefinition(
-                fuzzySql,
-                new { NormalizedName = normalizedName, Limit = limit },
-                cancellationToken: cancellationToken));
+        try
+        {
+            await using var tx = await conn.BeginTransactionAsync(cancellationToken);
+            await conn.ExecuteAsync(
+                new CommandDefinition(
+                    "SET LOCAL pg_trgm.similarity_threshold = 0.55; SET LOCAL statement_timeout = '1500ms';",
+                    transaction: tx,
+                    cancellationToken: cancellationToken));
 
-        return fuzzyRows.Select(MapRow).ToList();
+            var fuzzyRows = (await conn.QueryAsync<PersonRow>(
+                new CommandDefinition(
+                    fuzzySql,
+                    new { NormalizedName = normalizedName, Limit = limit },
+                    transaction: tx,
+                    commandTimeout: 2,
+                    cancellationToken: cancellationToken))).ToList();
+
+            await tx.CommitAsync(cancellationToken);
+
+            return fuzzyRows.Select(MapRow).ToList();
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.QueryCanceled)
+        {
+            // Gracefully degrade on 1.5s fuzzy timeout rather than returning 500
+            return [];
+        }
     }
 
     public async Task<PersonRecord?> GetByQidAsync(

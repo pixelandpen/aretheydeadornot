@@ -41,16 +41,15 @@ resource "azurerm_role_assignment" "aks_acr_pull" {
   skip_service_principal_aad_check = true
 }
 
-# Azure PostgreSQL Flexible Server Read Replicas require General Purpose (GP_) or Memory Optimized (MO_) SKU
 resource "azurerm_postgresql_flexible_server" "primary" {
   name                   = "pg-${var.project_name}-primary-${random_string.suffix.result}"
   resource_group_name    = azurerm_resource_group.rg.name
-  location               = azurerm_resource_group.rg.location
-  version                = "17"
+  location               = var.postgres_location
+  version                = "16"
   administrator_login    = var.postgres_admin_username
   administrator_password = var.postgres_admin_password
   storage_mb             = 32768
-  sku_name               = "GP_Standard_D2s_v3"
+  sku_name               = "B_Standard_B2s"
   zone                   = "1"
 }
 
@@ -68,25 +67,18 @@ resource "azurerm_postgresql_flexible_server_firewall_rule" "allow_azure" {
   end_ip_address   = "0.0.0.0"
 }
 
-resource "azurerm_postgresql_flexible_server" "read_replica" {
-  name                = "pg-${var.project_name}-replica-${random_string.suffix.result}"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  version             = "17"
-  create_mode         = "Replica"
-  source_server_id    = azurerm_postgresql_flexible_server.primary.id
-  sku_name            = "GP_Standard_D2s_v3"
-}
+resource "azurerm_managed_redis" "redis" {
+  name                      = "redis-${var.project_name}-${random_string.suffix.result}"
+  location                  = azurerm_resource_group.rg.location
+  resource_group_name       = azurerm_resource_group.rg.name
+  sku_name                  = "Balanced_B0"
+  high_availability_enabled = false
 
-resource "azurerm_redis_cache" "redis" {
-  name                 = "redis-${var.project_name}-${random_string.suffix.result}"
-  location             = azurerm_resource_group.rg.location
-  resource_group_name  = azurerm_resource_group.rg.name
-  capacity             = 0
-  family               = "C"
-  sku_name             = "Basic"
-  non_ssl_port_enabled = false
-  minimum_tls_version  = "1.2"
+  default_database {
+    access_keys_authentication_enabled = true
+    clustering_policy                  = "OSSCluster"
+    eviction_policy                    = "VolatileLRU"
+  }
 }
 
 resource "helm_release" "ingress_nginx" {

@@ -1,11 +1,11 @@
 # Are They Dead Or Not?
 
 A production-style proof-of-concept answering *"Is this person dead or not?"* in sub-100ms, built with:
-- **Backend:** C# / .NET 9 Minimal APIs + Dapper + `HybridCache` (L1 In-Memory + L2 Redis)
+- **Backend:** C# / .NET 9 Minimal APIs + Dapper + `HybridCache` (L1 In-Memory + L2 Redis) + Per-IP Sliding-Window Rate Limiting
 - **Database:** PostgreSQL 17 Primary + Streaming Read Replica (bulk-migrated from your 2.29M-row Wikidata SQLite database)
 - **Frontend:** React + TypeScript + Vite
 - **Load Balancing & Orchestration:** NGINX Load Balancer (`docker-compose`), Kubernetes (`k8s/`), and Terraform for Azure AKS (`infra/terraform/`)
-- **Testing & CI/CD:** xUnit unit tests + GitHub Actions PR gate
+- **Testing & CI/CD:** xUnit unit tests, `k6` load/spike simulator, and GitHub Actions PR gate
 
 ---
 
@@ -53,12 +53,14 @@ By default, [migrate_sqlite_to_pg.py](data/migrate_sqlite_to_pg.py) reads `./wik
 
 ---
 
-## 3. Running Unit Tests (xUnit)
+## 3. Running Unit & Load Tests
 
 With Docker (no local .NET SDK required):
 ```bash
 docker run --rm -v "$(pwd):/src" -w /src mcr.microsoft.com/dotnet/sdk:9.0 dotnet test
 ```
+
+For **`k6` load & spike testing**, rate-limiting details, and Azure AKS benchmark results, see [tests/README.md](tests/README.md).
 
 ---
 
