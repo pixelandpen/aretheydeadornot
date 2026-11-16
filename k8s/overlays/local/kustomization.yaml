@@ -21,3 +21,10 @@ patches:
     target:
       kind: Deployment
       name: web
+  - patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+    target:
+      kind: Deployment
+      name: worker

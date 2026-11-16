@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: aretheydeadornot
+  labels:
+    app: worker
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+        - name: worker
+          image: aretheydeadornot-api:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
+            - name: ConnectionStrings__PostgresReadReplica
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: postgres-read-replica
+            - name: ConnectionStrings__Redis
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: redis
+            - name: DeathSync__Enabled
+              value: "true"
+            - name: DeathSync__BatchSize
+              value: "50"
+            - name: DeathSync__IntervalSeconds
+              value: "30"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+  namespace: aretheydeadornot
+spec:
+  selector:
+    app: worker
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP

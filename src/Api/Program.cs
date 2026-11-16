@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Threading.RateLimiting;
+using AreTheyDeadOrNot.Api.Observability;
+using AreTheyDeadOrNot.Api.Workers;
 using AreTheyDeadOrNot.Core.Models;
 using AreTheyDeadOrNot.Core.Repositories;
 using AreTheyDeadOrNot.Core.Services;
@@ -8,11 +10,24 @@ using AreTheyDeadOrNot.Infrastructure.Data;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Caching.Hybrid;
+using OpenTelemetry.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddSingleton<AppMetrics>();
+builder.Services.AddHostedService<DeathSyncWorker>();
+
+builder.Services.AddOpenTelemetry()
+    .WithMetrics(metrics =>
+    {
+        metrics
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddMeter(AppMetrics.MeterName)
+            .AddPrometheusExporter();
+    });
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -70,6 +85,7 @@ if (app.Environment.IsDevelopment())
 app.UseForwardedHeaders();
 app.UseCors();
 app.UseRateLimiter();
+app.MapPrometheusScrapingEndpoint("/metrics");
 
 // Kubernetes liveness & readiness probes
 app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
@@ -100,6 +116,7 @@ v1.MapGet("/search", async (
     IPersonRepository repository,
     DisambiguationService disambiguation,
     HybridCache cache,
+    AppMetrics metrics,
     HttpContext httpContext,
     CancellationToken ct) =>
 {
@@ -126,6 +143,7 @@ v1.MapGet("/search", async (
         cancellationToken: ct);
 
     sw.Stop();
+    metrics.RecordSearch(cached.Found, sw.Elapsed.TotalMilliseconds);
     httpContext.Response.Headers["X-Query-Time-Ms"] = sw.ElapsedMilliseconds.ToString();
 
     return Results.Ok(new SearchResponse(

@@ -32,3 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_people_recent_deaths
 CREATE INDEX IF NOT EXISTS idx_people_in_memory
     ON people (death_month_day, sitelinks DESC)
     WHERE death_date IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_people_alive_sitelinks
+    ON people (sitelinks DESC, qid ASC)
+    WHERE death_date IS NULL;
