@@ -1,11 +1,30 @@
 # Are They Dead Or Not?
 
 A production-style proof-of-concept answering *"Is this person dead or not?"* in sub-100ms, built with:
-- **Backend:** C# / .NET 9 Minimal APIs + Dapper + `HybridCache` (L1 In-Memory + L2 Redis) + Per-IP Sliding-Window Rate Limiting
-- **Database:** PostgreSQL 17 Primary + Streaming Read Replica (bulk-migrated from your 2.29M-row Wikidata SQLite database)
-- **Frontend:** React + TypeScript + Vite
-- **Load Balancing & Orchestration:** NGINX Load Balancer (`docker-compose`), Kubernetes (`k8s/`), and Terraform for Azure AKS (`infra/terraform/`)
-- **Testing & CI/CD:** xUnit unit tests, `k6` load/spike simulator, and GitHub Actions PR gate
+
+- **Backend:** C# / **.NET 11** Minimal APIs + Dapper + `HybridCache` (L1 in-memory + L2 Redis) + per-IP sliding-window rate limiting (`AddRateLimiter` + `UseForwardedHeaders`)
+- **Background Death Sync:** Single-replica `DeathSyncWorker` (`IHostedService`) that keyset-paginates living records (`WHERE death_date IS NULL`, ordered by `sitelinks DESC`) via a partial index, batches 50 QIDs per Wikidata `wbgetentities` call (`P570`), writes new death dates to PostgreSQL, and performs targeted `HybridCache` invalidation
+- **Database:** PostgreSQL 17 Primary + Streaming Read Replica in Docker Compose (and Azure Database for PostgreSQL Flexible Server in Azure), bulk-migrated via `COPY` from a 2.29M-row Wikidata SQLite database with B-tree + bounded `pg_trgm` fuzzy-search indexes
+- **Frontend:** React + TypeScript + Vite SPA (search with *"Did you mean...?"* disambiguation, Recent Deaths, In Memory ±3 days, and About This Site)
+- **Observability:** OpenTelemetry metrics (`/metrics`), Prometheus scraping, and a pre-provisioned Grafana dashboard (Docker Compose `:3000` and `k8s/observability/`)
+- **Load Balancing, Orchestration & IaC:** NGINX Load Balancer (`docker-compose`), Kubernetes (`k8s/` with HPA), Terraform for Azure AKS (`infra/terraform/`), xUnit unit tests, `k6` load/spike simulator, and GitHub Actions PR gate
+
+### Architecture Overview
+
+```mermaid
+flowchart LR
+    Client["Browser / k6"] --> Ingress["NGINX LB / AKS Ingress"]
+    Ingress -->|"/"| Web["React SPA (NGINX Pods)"]
+    Ingress -->|"/api/*"| API["C# .NET 11 Minimal APIs (HPA 2-6 Pods)"]
+    API -->|"L1 + L2 Cache"| Redis["Redis / Azure Managed Redis"]
+    API -->|"Dapper Read Queries"| PG["PostgreSQL Read Replica / Azure PG"]
+    Worker["DeathSyncWorker (1 Replica)"] -->|"Batch P570 (50 QIDs)"| Wikidata["Wikidata API"]
+    Worker -->|"Write Updates"| PGPrimary["PostgreSQL Primary"]
+    Worker -->|"Targeted Invalidation"| Redis
+    Prom["Prometheus"] -->|"/metrics"| API
+    Prom -->|"/metrics"| Worker
+    Grafana["Grafana Dashboard"] --> Prom
+```
 
 ---
 

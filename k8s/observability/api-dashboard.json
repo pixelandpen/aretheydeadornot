@@ -1,0 +1,77 @@
+{
+  "title": "AreTheyDeadOrNot API Observability",
+  "uid": "atdon-api",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_request_duration_seconds_count[1m])) by (http_response_status_code)",
+          "legendFormat": "HTTP {{http_response_status_code}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Search Latency p95 (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(atdon_search_duration_ms_bucket[1m])) by (le))",
+          "legendFormat": "p95 (ms)"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(atdon_search_duration_ms_bucket[1m])) by (le))",
+          "legendFormat": "p50 (ms)"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Total Search Requests",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(atdon_search_requests_total)",
+          "legendFormat": "Total"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "429 Rate-Limited Requests / sec",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_request_duration_seconds_count{http_response_status_code=\"429\"}[1m])) or vector(0)",
+          "legendFormat": "429/s"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Death Sync (Checked vs Updated)",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(atdon_death_sync_checked_total)",
+          "legendFormat": "Checked"
+        },
+        {
+          "expr": "sum(atdon_death_sync_updated_total)",
+          "legendFormat": "Updated"
+        }
+      ]
+    }
+  ]
+}

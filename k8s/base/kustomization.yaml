@@ -6,5 +6,6 @@ resources:
   - namespace.yaml
   - api-deployment.yaml
   - api-service.yaml
+  - worker-deployment.yaml
   - web.yaml
   - ingress.yaml
