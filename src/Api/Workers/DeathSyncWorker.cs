@@ -6,8 +6,10 @@ using Microsoft.Extensions.Caching.Hybrid;
 namespace AreTheyDeadOrNot.Api.Workers;
 
 /// <summary>
-/// Periodically checks batches of living people (ordered by sitelinks DESC) against Wikidata P570
-/// using keyset pagination so it never scans the full table or blocks read-replica queries.
+/// Tiered background sync against Wikidata P570:
+/// - Priority Tier (sitelinks >= PriorityMinSitelinks): refreshed first every PriorityRefreshHours (e.g. daily).
+/// - Long-Tail Tier (sitelinks < PriorityMinSitelinks): scanned continuously between priority cycles.
+/// Uses keyset pagination on idx_people_alive_sitelinks and honors Wikidata Retry-After backoff.
 /// </summary>
 public sealed class DeathSyncWorker(
     IServiceScopeFactory scopeFactory,
@@ -16,8 +18,16 @@ public sealed class DeathSyncWorker(
     IConfiguration configuration,
     ILogger<DeathSyncWorker> logger) : BackgroundService
 {
-    private int? _lastSitelinks;
-    private string? _lastQid;
+    private enum SyncTier { Priority, LongTail }
+
+    private SyncTier _tier = SyncTier.Priority;
+    private DateTimeOffset _lastPriorityStartUtc = DateTimeOffset.UtcNow;
+
+    private int? _priorityLastSitelinks;
+    private string? _priorityLastQid;
+
+    private int? _longTailLastSitelinks;
+    private string? _longTailLastQid;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -28,14 +38,18 @@ public sealed class DeathSyncWorker(
         }
 
         var batchSize = Math.Clamp(configuration.GetValue("DeathSync:BatchSize", 50), 1, 50);
-        var intervalSeconds = Math.Clamp(configuration.GetValue("DeathSync:IntervalSeconds", 30), 5, 3600);
+        var intervalSeconds = Math.Clamp(configuration.GetValue("DeathSync:IntervalSeconds", 2), 1, 3600);
+        var priorityMinSitelinks = Math.Max(configuration.GetValue("DeathSync:PriorityMinSitelinks", 10), 1);
+        var priorityRefreshHours = Math.Clamp(configuration.GetValue("DeathSync:PriorityRefreshHours", 24), 1, 168);
 
         logger.LogInformation(
-            "DeathSyncWorker started (batchSize={BatchSize}, intervalSeconds={IntervalSeconds}).",
+            "DeathSyncWorker started (batchSize={BatchSize}, intervalSeconds={IntervalSeconds}, priorityMinSitelinks={MinSitelinks}, priorityRefreshHours={RefreshHours}).",
             batchSize,
-            intervalSeconds);
+            intervalSeconds,
+            priorityMinSitelinks,
+            priorityRefreshHours);
 
-        // Short startup delay so API readiness probes pass immediately
+        // Short startup delay so readiness probes pass immediately
         await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(intervalSeconds));
@@ -43,11 +57,26 @@ public sealed class DeathSyncWorker(
         {
             try
             {
-                await ProcessNextBatchAsync(batchSize, stoppingToken);
+                if (_tier == SyncTier.LongTail &&
+                    DateTimeOffset.UtcNow - _lastPriorityStartUtc >= TimeSpan.FromHours(priorityRefreshHours))
+                {
+                    logger.LogInformation("Starting daily Priority Tier sync (sitelinks >= {MinSitelinks}).", priorityMinSitelinks);
+                    _tier = SyncTier.Priority;
+                    _priorityLastSitelinks = null;
+                    _priorityLastQid = null;
+                    _lastPriorityStartUtc = DateTimeOffset.UtcNow;
+                }
+
+                await ProcessNextBatchAsync(batchSize, priorityMinSitelinks, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
+            }
+            catch (WikidataRateLimitException ex)
+            {
+                logger.LogWarning(ex, "Wikidata rate limit hit; backing off for {Delay}s.", ex.RetryAfter.TotalSeconds);
+                await Task.Delay(ex.RetryAfter, stoppingToken);
             }
             catch (Exception ex)
             {
@@ -57,24 +86,54 @@ public sealed class DeathSyncWorker(
         while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    private async Task ProcessNextBatchAsync(int batchSize, CancellationToken ct)
+    private async Task ProcessNextBatchAsync(int batchSize, int priorityMinSitelinks, CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<IDeathSyncRepository>();
         var wikidata = scope.ServiceProvider.GetRequiredService<WikidataDeathClient>();
 
-        var batch = await repo.GetNextAliveBatchAsync(_lastSitelinks, _lastQid, batchSize, ct);
-        if (batch.Count == 0)
+        IReadOnlyList<AlivePersonCursorItem> batch;
+        if (_tier == SyncTier.Priority)
         {
-            // Reached end of table; wrap cursor back to highest-sitelink people
-            _lastSitelinks = null;
-            _lastQid = null;
-            return;
-        }
+            batch = await repo.GetNextAliveBatchAsync(
+                _priorityLastSitelinks,
+                _priorityLastQid,
+                batchSize,
+                minSitelinks: priorityMinSitelinks,
+                cancellationToken: ct);
 
-        var last = batch[^1];
-        _lastSitelinks = last.Sitelinks;
-        _lastQid = last.Qid;
+            if (batch.Count == 0)
+            {
+                logger.LogInformation("Priority Tier pass complete; resuming Long-Tail Tier.");
+                _tier = SyncTier.LongTail;
+                _priorityLastSitelinks = null;
+                _priorityLastQid = null;
+                return;
+            }
+
+            _priorityLastSitelinks = batch[^1].Sitelinks;
+            _priorityLastQid = batch[^1].Qid;
+        }
+        else
+        {
+            batch = await repo.GetNextAliveBatchAsync(
+                _longTailLastSitelinks,
+                _longTailLastQid,
+                batchSize,
+                maxSitelinksExclusive: priorityMinSitelinks,
+                cancellationToken: ct);
+
+            if (batch.Count == 0)
+            {
+                logger.LogInformation("Long-Tail Tier pass complete; wrapping cursor.");
+                _longTailLastSitelinks = null;
+                _longTailLastQid = null;
+                return;
+            }
+
+            _longTailLastSitelinks = batch[^1].Sitelinks;
+            _longTailLastQid = batch[^1].Qid;
+        }
 
         var deathDates = await wikidata.FetchDeathDatesAsync(batch.Select(b => b.Qid).ToList(), ct);
         var updatedCount = 0;
@@ -95,7 +154,6 @@ public sealed class DeathSyncWorker(
                     item.NormalizedName,
                     deathDate);
 
-                // Targeted invalidation only for the changed person & recent-deaths list
                 await cache.RemoveAsync($"person:{item.Qid}", ct);
                 if (!string.IsNullOrEmpty(item.NormalizedName))
                 {
