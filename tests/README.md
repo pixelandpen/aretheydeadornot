@@ -10,7 +10,7 @@ This directory contains:
 
 With Docker (no local .NET SDK required):
 ```bash
-docker run --rm -v "$(pwd):/src" -w /src mcr.microsoft.com/dotnet/sdk:9.0 dotnet test
+docker run --rm -v "$(pwd):/src" -w /src mcr.microsoft.com/dotnet/sdk:11.0 dotnet test
 ```
 
 Covered areas:
