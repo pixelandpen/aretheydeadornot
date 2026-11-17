@@ -40,7 +40,11 @@ spec:
             - name: DeathSync__BatchSize
               value: "50"
             - name: DeathSync__IntervalSeconds
-              value: "30"
+              value: "2"
+            - name: DeathSync__PriorityMinSitelinks
+              value: "10"
+            - name: DeathSync__PriorityRefreshHours
+              value: "24"
           resources:
             requests:
               cpu: "50m"

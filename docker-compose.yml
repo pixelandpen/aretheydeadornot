@@ -97,7 +97,9 @@ services:
       ConnectionStrings__Redis: redis:6379
       DeathSync__Enabled: "true"
       DeathSync__BatchSize: "50"
-      DeathSync__IntervalSeconds: "30"
+      DeathSync__IntervalSeconds: "2"
+      DeathSync__PriorityMinSitelinks: "10"
+      DeathSync__PriorityRefreshHours: "24"
 
   api-2:
     build:
@@ -115,7 +117,9 @@ services:
       ConnectionStrings__Redis: redis:6379
       DeathSync__Enabled: "true"
       DeathSync__BatchSize: "50"
-      DeathSync__IntervalSeconds: "30"
+      DeathSync__IntervalSeconds: "2"
+      DeathSync__PriorityMinSitelinks: "10"
+      DeathSync__PriorityRefreshHours: "24"
 
   web:
     build:

@@ -19,12 +19,16 @@ public sealed class PostgresDeathSyncRepository(
         int? lastSitelinks,
         string? lastQid,
         int batchSize,
+        int? minSitelinks = null,
+        int? maxSitelinksExclusive = null,
         CancellationToken cancellationToken = default)
     {
         const string initialSql = """
             SELECT qid AS Qid, normalized_name AS NormalizedName, sitelinks AS Sitelinks
             FROM people
             WHERE death_date IS NULL
+              AND (@MinSitelinks IS NULL OR sitelinks >= @MinSitelinks)
+              AND (@MaxSitelinksExclusive IS NULL OR sitelinks < @MaxSitelinksExclusive)
             ORDER BY sitelinks DESC, qid ASC
             LIMIT @BatchSize;
             """;
@@ -33,6 +37,8 @@ public sealed class PostgresDeathSyncRepository(
             SELECT qid AS Qid, normalized_name AS NormalizedName, sitelinks AS Sitelinks
             FROM people
             WHERE death_date IS NULL
+              AND (@MinSitelinks IS NULL OR sitelinks >= @MinSitelinks)
+              AND (@MaxSitelinksExclusive IS NULL OR sitelinks < @MaxSitelinksExclusive)
               AND (sitelinks < @LastSitelinks OR (sitelinks = @LastSitelinks AND qid > @LastQid))
             ORDER BY sitelinks DESC, qid ASC
             LIMIT @BatchSize;
@@ -42,11 +48,23 @@ public sealed class PostgresDeathSyncRepository(
         var rows = lastSitelinks is null || string.IsNullOrEmpty(lastQid)
             ? await conn.QueryAsync<CursorRow>(new CommandDefinition(
                 initialSql,
-                new { BatchSize = batchSize },
+                new
+                {
+                    BatchSize = batchSize,
+                    MinSitelinks = minSitelinks,
+                    MaxSitelinksExclusive = maxSitelinksExclusive
+                },
                 cancellationToken: cancellationToken))
             : await conn.QueryAsync<CursorRow>(new CommandDefinition(
                 keysetSql,
-                new { LastSitelinks = lastSitelinks.Value, LastQid = lastQid, BatchSize = batchSize },
+                new
+                {
+                    LastSitelinks = lastSitelinks.Value,
+                    LastQid = lastQid,
+                    BatchSize = batchSize,
+                    MinSitelinks = minSitelinks,
+                    MaxSitelinksExclusive = maxSitelinksExclusive
+                },
                 cancellationToken: cancellationToken));
 
         return rows

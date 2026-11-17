@@ -8,6 +8,8 @@ public interface IDeathSyncRepository
         int? lastSitelinks,
         string? lastQid,
         int batchSize,
+        int? minSitelinks = null,
+        int? maxSitelinksExclusive = null,
         CancellationToken cancellationToken = default);
 
     Task<bool> MarkDeceasedAsync(
