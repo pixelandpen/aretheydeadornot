@@ -3,6 +3,10 @@ kind: Kustomization
 
 resources:
   - ../../base
+  - cluster-issuer.yaml
+
+patches:
+  - path: ingress-tls.yaml
 
 # Set ACR_LOGIN_SERVER in CD pipeline via `kustomize edit set image`
 images:
