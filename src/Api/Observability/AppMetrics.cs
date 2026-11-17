@@ -9,7 +9,7 @@ public sealed class AppMetrics
     private readonly Counter<long> _searchRequests;
     private readonly Histogram<double> _searchDurationMs;
     private readonly Counter<long> _deathSyncChecked;
-    private readonly Counter<long> _deathSyncUpdated;
+    private long _deathSyncUpdatedTotal;
 
     public AppMetrics(IMeterFactory meterFactory)
     {
@@ -24,8 +24,9 @@ public sealed class AppMetrics
         _deathSyncChecked = meter.CreateCounter<long>(
             "atdon_death_sync_checked",
             description: "Total alive records checked against Wikidata");
-        _deathSyncUpdated = meter.CreateCounter<long>(
+        meter.CreateObservableCounter(
             "atdon_death_sync_updated",
+            () => Interlocked.Read(ref _deathSyncUpdatedTotal),
             description: "Total records updated with newly discovered death dates");
     }
 
@@ -40,7 +41,7 @@ public sealed class AppMetrics
         _deathSyncChecked.Add(checkedCount);
         if (updatedCount > 0)
         {
-            _deathSyncUpdated.Add(updatedCount);
+            Interlocked.Add(ref _deathSyncUpdatedTotal, updatedCount);
         }
     }
 }
