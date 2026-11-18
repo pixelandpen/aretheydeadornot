@@ -31,7 +31,7 @@ export function App() {
   const [listsLoading, setListsLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchRecentDeaths(8), fetchInMemory(3, 8)])
+    Promise.all([fetchRecentDeaths(8), fetchInMemory(2, 8)])
       .then(([recent, memorial]) => {
         setRecentDeaths(recent.items);
         setInMemory(memorial.items);
@@ -195,7 +195,7 @@ export function App() {
         </section>
 
         <section className="panel">
-          <h3>In Memory (±3 Days)</h3>
+          <h3>In Memory (±2 Days)</h3>
           {listsLoading ? (
             <p className="muted">Loading...</p>
           ) : inMemory.length === 0 ? (
