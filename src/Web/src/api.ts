@@ -1,6 +1,6 @@
 import type { ListResponse, SearchResponse } from './types';
 
-const API_BASE = '/api/v1';
+const API_BASE = `${import.meta.env.BASE_URL}api/v1`;
 
 export async function searchPerson(name: string): Promise<SearchResponse> {
   const res = await fetch(`${API_BASE}/search?name=${encodeURIComponent(name)}`);
