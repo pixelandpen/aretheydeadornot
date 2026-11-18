@@ -10,14 +10,14 @@ services:
       - "maintenance_work_mem=128MB"
       - "-c"
       - "work_mem=4MB"
-    ports: !override []
+    ports: !reset []
 
   postgres-replica:
     profiles: ["full"]
 
   redis:
     command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
-    ports: !override []
+    ports: !reset []
 
   api-1:
     depends_on: !override
