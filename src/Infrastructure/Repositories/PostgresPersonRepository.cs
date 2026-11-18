@@ -232,7 +232,7 @@ public sealed class PostgresPersonRepository(ReadReplicaDataSource readReplica) 
                     ARRAY[]::text[]
                 ) AS Occupations
             FROM memorial m
-            ORDER BY m.sitelinks DESC;
+            ORDER BY m.death_date DESC, m.sitelinks DESC;
             """;
 
         await using var conn = await readReplica.OpenConnectionAsync(cancellationToken);

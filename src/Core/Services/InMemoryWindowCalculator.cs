@@ -6,7 +6,7 @@ public static class InMemoryWindowCalculator
     /// Computes the set of MMDD keys (e.g. 1113 for Nov 13) for [today - radiusDays, today + radiusDays].
     /// Handles month and year boundaries seamlessly (e.g. Dec 30 -> Jan 2).
     /// </summary>
-    public static IReadOnlyList<short> GetMonthDayKeys(DateOnly today, int radiusDays = 3)
+    public static IReadOnlyList<short> GetMonthDayKeys(DateOnly today, int radiusDays = 2)
     {
         var clampedRadius = Math.Clamp(radiusDays, 0, 14);
         var keys = new List<short>(clampedRadius * 2 + 1);

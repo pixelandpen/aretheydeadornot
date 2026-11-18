@@ -5,7 +5,7 @@ A production-style proof-of-concept answering *"Is this person dead or not?"* in
 - **Backend:** C# / **.NET 11** Minimal APIs + Dapper + `HybridCache` (L1 in-memory + L2 Redis) + per-IP sliding-window rate limiting (`AddRateLimiter` + `UseForwardedHeaders`)
 - **Background Death Sync:** Single-replica `DeathSyncWorker` (`IHostedService`) running a tiered daily sync (`sitelinks >= 10` every 24h, continuous long-tail scan between cycles) at 50 QIDs every 2s via `idx_people_alive_sitelinks`, with `Retry-After` backoff, Wikidata `P570` lookup, PostgreSQL updates, and targeted `HybridCache` invalidation
 - **Database:** PostgreSQL 17 Primary + Streaming Read Replica in Docker Compose (and Azure Database for PostgreSQL Flexible Server in Azure), bulk-migrated via `COPY` from a 2.29M-row Wikidata SQLite database with B-tree + bounded `pg_trgm` fuzzy-search indexes
-- **Frontend:** React + TypeScript + Vite SPA (search with *"Did you mean...?"* disambiguation, Recent Deaths, In Memory ±3 days, and About This Site)
+- **Frontend:** React + TypeScript + Vite SPA (search with *"Did you mean...?"* disambiguation, Recent Deaths, In Memory ±2 days, and About This Site)
 - **Observability:** OpenTelemetry metrics (`/metrics`), Prometheus scraping, and a pre-provisioned Grafana dashboard (Docker Compose `:3000` and `k8s/observability/`)
 - **Load Balancing, Orchestration & IaC:** NGINX Load Balancer (`docker-compose`), Kubernetes (`k8s/` with HPA), Terraform for Azure AKS (`infra/terraform/`), xUnit unit tests, `k6` load/spike simulator, and GitHub Actions PR gate
 
@@ -80,7 +80,7 @@ By default, [migrate_sqlite_to_pg.py](data/migrate_sqlite_to_pg.py) reads `./wik
    - Web UI: http://localhost:8080
    - API Search: `http://localhost:8080/api/v1/search?name=Michael%20Jackson`
    - Recent Deaths: `http://localhost:8080/api/v1/recent-deaths`
-   - In Memory (±3 days): `http://localhost:8080/api/v1/in-memory`
+   - In Memory (±2 days): `http://localhost:8080/api/v1/in-memory`
    - Health Readiness: `http://localhost:8080/health/ready`
    - Grafana Dashboard: http://localhost:3000 (`admin`/`admin` or anonymous viewer)
    - Prometheus: http://localhost:9090

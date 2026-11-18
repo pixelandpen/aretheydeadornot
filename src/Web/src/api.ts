@@ -26,7 +26,7 @@ export async function fetchRecentDeaths(limit = 8): Promise<ListResponse> {
   return res.json();
 }
 
-export async function fetchInMemory(days = 3, limit = 8): Promise<ListResponse> {
+export async function fetchInMemory(days = 2, limit = 8): Promise<ListResponse> {
   const res = await fetch(`${API_BASE}/in-memory?days=${days}&limit=${limit}`);
   if (!res.ok) {
     throw new Error(`In memory failed (${res.status})`);
