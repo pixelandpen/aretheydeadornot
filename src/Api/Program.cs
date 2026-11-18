@@ -219,7 +219,7 @@ v1.MapGet("/in-memory", async (
     CancellationToken ct) =>
 {
     var sw = Stopwatch.StartNew();
-    var radius = Math.Clamp(days ?? 3, 1, 7);
+    var radius = Math.Clamp(days ?? 2, 1, 7);
     var clampedLimit = Math.Clamp(limit ?? 12, 1, 50);
     var today = DateOnly.FromDateTime(DateTime.UtcNow);
     var keys = InMemoryWindowCalculator.GetMonthDayKeys(today, radius);
